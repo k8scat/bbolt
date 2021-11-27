@@ -19,7 +19,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	bolt "go.etcd.io/bbolt"
+	bolt "github.com/k8scat/bbolt"
 )
 
 var (
@@ -128,6 +128,8 @@ func (m *Main) Run(args ...string) error {
 		return newPagesCommand(m).Run(args[1:]...)
 	case "stats":
 		return newStatsCommand(m).Run(args[1:]...)
+	case "put":
+		return newPutCommand(m).Run(args[1:]...)
 	default:
 		return ErrUnknownCommand
 	}
@@ -155,10 +157,85 @@ The commands are:
     help        print this screen
     page        print one or more pages in human readable format
     pages       print list of pages with their types
-    page-item   print the key and value of a page item.
+    page-item   print the key and value of a page item
     stats       iterate over all pages and generate usage stats
+    put         update the value of a key in a bucket
 
 Use "bbolt [command] -h" for more information about a command.
+`, "\n")
+}
+
+// PutCommand represents the "put" command execution.
+type PutCommand struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewPutCommand returns a PutCommand.
+func newPutCommand(m *Main) *PutCommand {
+	return &PutCommand{
+		Stdin:  m.Stdin,
+		Stdout: m.Stdout,
+		Stderr: m.Stderr,
+	}
+}
+
+// Run executes the command.
+func (cmd *PutCommand) Run(args ...string) error {
+	// Parse flags.
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
+	}
+
+	// Require database path, bucket and key.
+	path, bucket, key, value := fs.Arg(0), fs.Arg(1), fs.Arg(2), fs.Arg(3)
+	if path == "" {
+		return ErrPathRequired
+	} else if _, err := os.Stat(path); os.IsNotExist(err) {
+		return ErrFileNotFound
+	} else if bucket == "" {
+		return ErrBucketRequired
+	} else if key == "" {
+		return ErrKeyRequired
+	}
+
+	// Open database.
+	db, err := bolt.Open(path, 0666, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Update value.
+	return db.Update(func(tx *bolt.Tx) error {
+		// Find bucket.
+		b := tx.Bucket([]byte(bucket))
+		if b == nil {
+			return ErrBucketNotFound
+		}
+
+		// Update value for given key.
+		if err := b.Put([]byte(key), []byte(value)); err != nil {
+			return err
+		}
+
+		fmt.Fprintln(cmd.Stdout, "OK")
+		return nil
+	})
+}
+
+// Usage returns the help message.
+func (cmd *PutCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt put PATH bucket key value
+
+Update the value of the given key in the given bucket.
 `, "\n")
 }
 

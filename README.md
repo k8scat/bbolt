@@ -8,6 +8,9 @@ bbolt
 [![Releases](https://img.shields.io/github/release/etcd-io/bbolt/all.svg?style=flat-square)](https://github.com/etcd-io/bbolt/releases)
 [![LICENSE](https://img.shields.io/github/license/etcd-io/bbolt.svg?style=flat-square)](https://github.com/etcd-io/bbolt/blob/master/LICENSE)
 
+Forked from [etcd-io/bbolt](https://github.com/etcd-io/bbolt)
+and add `put` command to the `bbolt` CLI tool.
+
 bbolt is a fork of [Ben Johnson's][gh_ben] [Bolt][bolt] key/value
 store. The purpose of this fork is to provide the Go community with an active
 maintenance and development target for Bolt; the goal is improved reliability
@@ -80,7 +83,7 @@ New minor versions may add additional features to the API.
 To start using Bolt, install Go and run `go get`:
 
 ```sh
-$ go get go.etcd.io/bbolt/...
+$ go get github.com/k8scat/bbolt/...
 ```
 
 This will retrieve the library and install the `bolt` command line utility into
@@ -92,7 +95,7 @@ your `$GOBIN` path.
 To use bbolt as an embedded key-value store, import as:
 
 ```go
-import bolt "go.etcd.io/bbolt"
+import bolt "github.com/k8scat/bbolt"
 
 db, err := bolt.Open(path, 0666, nil)
 if err != nil {
