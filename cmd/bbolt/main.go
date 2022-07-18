@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"runtime"
@@ -1231,12 +1230,13 @@ func (cmd *KeysCommand) Run(args ...string) error {
 	}
 
 	// Require database path and bucket.
-	path, bucket := fs.Arg(0), fs.Arg(1)
+	relevantArgs := fs.Args()
+	path, buckets := relevantArgs[0], relevantArgs[1:]
 	if path == "" {
 		return ErrPathRequired
 	} else if _, err := os.Stat(path); os.IsNotExist(err) {
 		return ErrFileNotFound
-	} else if bucket == "" {
+	} else if len(buckets) == 0 {
 		return ErrBucketRequired
 	}
 
@@ -1250,13 +1250,19 @@ func (cmd *KeysCommand) Run(args ...string) error {
 	// Print keys.
 	return db.View(func(tx *bolt.Tx) error {
 		// Find bucket.
-		b := tx.Bucket([]byte(bucket))
-		if b == nil {
+		var lastbucket *bolt.Bucket = tx.Bucket([]byte(buckets[0]))
+		if lastbucket == nil {
 			return ErrBucketNotFound
+		}
+		for _, bucket := range buckets[1:] {
+			lastbucket = lastbucket.Bucket([]byte(bucket))
+			if lastbucket == nil {
+				return ErrBucketNotFound
+			}
 		}
 
 		// Iterate over each key.
-		return b.ForEach(func(key, _ []byte) error {
+		return lastbucket.ForEach(func(key, _ []byte) error {
 			fmt.Fprintln(cmd.Stdout, string(key))
 			return nil
 		})
@@ -1266,9 +1272,9 @@ func (cmd *KeysCommand) Run(args ...string) error {
 // Usage returns the help message.
 func (cmd *KeysCommand) Usage() string {
 	return strings.TrimLeft(`
-usage: bolt keys PATH BUCKET
+usage: bolt keys PATH [BUCKET...]
 
-Print a list of keys in the given bucket.
+Print a list of keys in the given (sub)bucket.
 `, "\n")
 }
 
@@ -1301,12 +1307,13 @@ func (cmd *GetCommand) Run(args ...string) error {
 	}
 
 	// Require database path, bucket and key.
-	path, bucket, key := fs.Arg(0), fs.Arg(1), fs.Arg(2)
+	relevantArgs := fs.Args()
+	path, buckets, key := relevantArgs[0], relevantArgs[1:len(relevantArgs)-1], relevantArgs[len(relevantArgs)-1]
 	if path == "" {
 		return ErrPathRequired
 	} else if _, err := os.Stat(path); os.IsNotExist(err) {
 		return ErrFileNotFound
-	} else if bucket == "" {
+	} else if len(buckets) == 0 {
 		return ErrBucketRequired
 	} else if key == "" {
 		return ErrKeyRequired
@@ -1322,13 +1329,19 @@ func (cmd *GetCommand) Run(args ...string) error {
 	// Print value.
 	return db.View(func(tx *bolt.Tx) error {
 		// Find bucket.
-		b := tx.Bucket([]byte(bucket))
-		if b == nil {
+		var lastbucket *bolt.Bucket = tx.Bucket([]byte(buckets[0]))
+		if lastbucket == nil {
 			return ErrBucketNotFound
+		}
+		for _, bucket := range buckets[1:] {
+			lastbucket = lastbucket.Bucket([]byte(bucket))
+			if lastbucket == nil {
+				return ErrBucketNotFound
+			}
 		}
 
 		// Find value for given key.
-		val := b.Get([]byte(key))
+		val := lastbucket.Get([]byte(key))
 		if val == nil {
 			return ErrKeyNotFound
 		}
@@ -1341,9 +1354,9 @@ func (cmd *GetCommand) Run(args ...string) error {
 // Usage returns the help message.
 func (cmd *GetCommand) Usage() string {
 	return strings.TrimLeft(`
-usage: bolt get PATH BUCKET KEY
+usage: bolt get PATH [BUCKET..] KEY
 
-Print the value of the given key in the given bucket.
+Print the value of the given key in the given (sub)bucket.
 `, "\n")
 }
 
@@ -1441,7 +1454,7 @@ func (cmd *BenchCommand) ParseFlags(args []string) (*BenchOptions, error) {
 
 	// Generate temp path if one is not passed in.
 	if options.Path == "" {
-		f, err := ioutil.TempFile("", "bolt-bench-")
+		f, err := os.CreateTemp("", "bolt-bench-")
 		if err != nil {
 			return nil, fmt.Errorf("temp file: %s", err)
 		}
@@ -2028,7 +2041,7 @@ func newCompactCommand(m *Main) *CompactCommand {
 func (cmd *CompactCommand) Run(args ...string) (err error) {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
+	fs.SetOutput(io.Discard)
 	fs.StringVar(&cmd.DstPath, "o", "", "")
 	fs.Int64Var(&cmd.TxMaxSize, "tx-max-size", 65536, "")
 	if err := fs.Parse(args); err == flag.ErrHelp {
@@ -2056,7 +2069,7 @@ func (cmd *CompactCommand) Run(args ...string) (err error) {
 	initialSize := fi.Size()
 
 	// Open source database.
-	src, err := bolt.Open(cmd.SrcPath, 0444, nil)
+	src, err := bolt.Open(cmd.SrcPath, 0444, &bolt.Options{ReadOnly: true})
 	if err != nil {
 		return err
 	}
