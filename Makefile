@@ -33,4 +33,7 @@ test:
 	# Note: gets "program not an importable package" in out of path builds
 	@TEST_FREELIST_TYPE=array go test -v ./cmd/bbolt
 
-.PHONY: race fmt errcheck test gosimple unused
+build-bbolt-cli:
+	GOOS=linux GOARCH=amd64 go1.17 build -trimpath -o bin/bbolt-cli cmd/bbolt/main.go
+
+.PHONY: race fmt errcheck test gosimple unused build-bbolt-cli
