@@ -219,8 +219,16 @@ func (cmd *PutCommand) Run(args ...string) error {
 			return ErrBucketNotFound
 		}
 
+		offset, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		raw := make([]byte, 8)
+		v := uint64(offset)
+		binary.LittleEndian.PutUint64(raw, v)
+
 		// Update value for given key.
-		if err := b.Put([]byte(key), []byte(value)); err != nil {
+		if err := b.Put([]byte(key), raw); err != nil {
 			return err
 		}
 
@@ -1346,7 +1354,10 @@ func (cmd *GetCommand) Run(args ...string) error {
 			return ErrKeyNotFound
 		}
 
-		fmt.Fprintln(cmd.Stdout, string(val))
+		offset := int64(binary.LittleEndian.Uint64(val))
+		offsetStr := strconv.FormatInt(offset, 10)
+
+		fmt.Fprintln(cmd.Stdout, offsetStr)
 		return nil
 	})
 }
